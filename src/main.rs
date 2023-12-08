@@ -1,3 +1,5 @@
+mod protocol;
+
 use std::net::UdpSocket;
 
 fn main() {
@@ -9,7 +11,8 @@ fn main() {
             Ok((size, source)) => {
                 let _received_data = String::from_utf8_lossy(&buf[0..size]);
                 println!("Received {} bytes from {}", size, source);
-                let response = [];
+                let header = protocol::DNSHeader::new(1234, true);
+                let response = header.to_bytes();
                 udp_socket
                     .send_to(&response, source)
                     .expect("Failed to send response");
