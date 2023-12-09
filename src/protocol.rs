@@ -1,3 +1,5 @@
+use std::net::Ipv4Addr;
+
 #[derive(Debug, Clone)]
 pub struct ProtocolError;
 
@@ -153,6 +155,39 @@ impl DNSQuestion {
     }
 }
 
+pub struct DNSAnswer {
+    // A domain name represented as a sequence of labels, where each label consists of a length
+    // octet followed by that number of octets.
+    domain_name: Vec<String>,
+    // The type of the query.
+    query_type: u16,
+    // The class of the query.
+    query_class: u16,
+    // The time to live of the resource record in seconds.
+    ttl: u32,
+    // The length of the resource record data in octets.
+    rdlength: u16,
+    // The resource record data.
+    rdata: Ipv4Addr,
+}
+
+impl DNSAnswer {
+    fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        for label in &self.domain_name {
+            bytes.push(label.len() as u8);
+            bytes.extend(label.as_bytes());
+        }
+        bytes.push(0x0);
+        bytes.extend(&self.query_type.to_be_bytes());
+        bytes.extend(&self.query_class.to_be_bytes());
+        bytes.extend(&self.ttl.to_be_bytes());
+        bytes.extend(&self.rdlength.to_be_bytes());
+        bytes.extend(&self.rdata.octets());
+        bytes
+    }
+}
+
 pub struct DNSQuery {
     header: DNSHeader,
     question_section: DNSQuestion,
@@ -183,21 +218,34 @@ impl DNSQuery {
 pub struct DNSResponse {
     header: DNSHeader,
     question_section: DNSQuestion,
+    answer_section: DNSAnswer,
 }
 
 impl DNSResponse {
     pub fn for_request(query: DNSQuery) -> DNSResponse {
         let mut header = DNSHeader::new(query.header.id, true);
         header.qdcount = 1;
+        // TODO: Actually compute these values
+        let answer = DNSAnswer {
+            domain_name: query.question_section.domain_name.clone(),
+            query_type: query.question_section.query_type,
+            query_class: query.question_section.query_class,
+            ttl: 60,
+            rdlength: 4,
+            rdata: Ipv4Addr::new(8, 8, 8, 8),
+        };
+        header.ancount = 1;
         DNSResponse {
             header,
             question_section: query.question_section,
+            answer_section: answer,
         }
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = self.header.to_bytes().to_vec();
         bytes.extend(self.question_section.to_bytes());
+        bytes.extend(self.answer_section.to_bytes());
         bytes
     }
 }
