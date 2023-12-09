@@ -9,13 +9,19 @@ fn main() {
     loop {
         match udp_socket.recv_from(&mut buf) {
             Ok((size, source)) => {
-                let _received_data = String::from_utf8_lossy(&buf[0..size]);
                 println!("Received {} bytes from {}", size, source);
-                let header = protocol::DNSHeader::new(1234, true);
-                let response = header.to_bytes();
-                udp_socket
-                    .send_to(&response, source)
-                    .expect("Failed to send response");
+                match protocol::DNSQuery::from_bytes(&buf[0..size]) {
+                    Ok(query) => {
+                        let response = protocol::DNSResponse::for_request(query);
+                        udp_socket
+                            .send_to(&response.to_bytes(), source)
+                            .expect("Failed to send response");
+                    }
+                    Err(e) => {
+                        eprintln!("Error parsing query: {}", e);
+                        continue;
+                    }
+                }
             }
             Err(e) => {
                 eprintln!("Error receiving data: {}", e);

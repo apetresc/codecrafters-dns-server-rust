@@ -1,3 +1,12 @@
+#[derive(Debug, Clone)]
+pub struct ProtocolError;
+
+impl std::fmt::Display for ProtocolError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "ProtocolError")
+    }
+}
+
 pub struct DNSHeader {
     // Packet Identifier (ID) - 16 bits
     // A random ID assigned to query packets. Response packets must reply with the same ID.
@@ -75,6 +84,120 @@ impl DNSHeader {
         bytes[6..8].copy_from_slice(&self.ancount.to_be_bytes());
         bytes[8..10].copy_from_slice(&self.nscount.to_be_bytes());
         bytes[10..12].copy_from_slice(&self.arcount.to_be_bytes());
+        bytes
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Result<DNSHeader, ProtocolError> {
+        if bytes.len() < 12 {
+            Err(ProtocolError)
+        } else {
+            let bytes = &bytes[0..12];
+            Ok(DNSHeader {
+                id: u16::from_be_bytes([bytes[0], bytes[1]]),
+                qr: bytes[2] >> 7,
+                opcode: (bytes[2] >> 3) & 0b1111,
+                aa: (bytes[2] >> 2) & 0b1,
+                tc: (bytes[2] >> 1) & 0b1,
+                rd: bytes[2] & 0b1,
+                ra: bytes[3] >> 7,
+                z: (bytes[3] >> 4) & 0b111,
+                rcode: bytes[3] & 0b1111,
+                qdcount: u16::from_be_bytes([bytes[4], bytes[5]]),
+                ancount: u16::from_be_bytes([bytes[6], bytes[7]]),
+                nscount: u16::from_be_bytes([bytes[8], bytes[9]]),
+                arcount: u16::from_be_bytes([bytes[10], bytes[11]]),
+            })
+        }
+    }
+}
+
+pub struct DNSQuestion {
+    // A domain name represented as a sequence of labels, where each label consists of a length
+    // octet followed by that number of octets.
+    domain_name: Vec<String>,
+    // The type of the query.
+    query_type: u16,
+    // The class of the query.
+    query_class: u16,
+}
+
+impl DNSQuestion {
+    fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        for label in &self.domain_name {
+            bytes.push(label.len() as u8);
+            bytes.extend(label.as_bytes());
+        }
+        bytes.push(0x0);
+        bytes.extend(&self.query_type.to_be_bytes());
+        bytes.extend(&self.query_class.to_be_bytes());
+        bytes
+    }
+
+    fn from_bytes(bytes: &[u8]) -> DNSQuestion {
+        let mut domain_name = Vec::new();
+        let mut i = 0;
+        while bytes[i] != 0x0 {
+            let label_length = bytes[i] as usize;
+            let label = String::from_utf8_lossy(&bytes[i + 1..i + 1 + label_length]);
+            domain_name.push(label.to_string());
+            i += 1 + label_length;
+        }
+        let query_type = u16::from_be_bytes([bytes[i + 1], bytes[i + 2]]);
+        let query_class = u16::from_be_bytes([bytes[i + 3], bytes[i + 4]]);
+        DNSQuestion {
+            domain_name,
+            query_type,
+            query_class,
+        }
+    }
+}
+
+pub struct DNSQuery {
+    header: DNSHeader,
+    question_section: DNSQuestion,
+}
+
+impl DNSQuery {
+    pub fn new(id: u16, question: DNSQuestion) -> DNSQuery {
+        DNSQuery {
+            header: DNSHeader::new(id, false),
+            question_section: question,
+        }
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Result<DNSQuery, ProtocolError> {
+        let header = DNSHeader::from_bytes(bytes)?;
+        let question_section = DNSQuestion::from_bytes(&bytes[12..]);
+        Ok(DNSQuery::new(header.id, question_section))
+    }
+
+    #[allow(dead_code)]
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = self.header.to_bytes().to_vec();
+        bytes.extend(self.question_section.to_bytes());
+        bytes
+    }
+}
+
+pub struct DNSResponse {
+    header: DNSHeader,
+    question_section: DNSQuestion,
+}
+
+impl DNSResponse {
+    pub fn for_request(query: DNSQuery) -> DNSResponse {
+        let mut header = DNSHeader::new(query.header.id, true);
+        header.qdcount = 1;
+        DNSResponse {
+            header,
+            question_section: query.question_section,
+        }
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = self.header.to_bytes().to_vec();
+        bytes.extend(self.question_section.to_bytes());
         bytes
     }
 }
