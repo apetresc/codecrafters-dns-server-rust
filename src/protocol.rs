@@ -9,6 +9,7 @@ impl std::fmt::Display for ProtocolError {
     }
 }
 
+#[derive(Debug)]
 pub struct DNSHeader {
     // Packet Identifier (ID) - 16 bits
     // A random ID assigned to query packets. Response packets must reply with the same ID.
@@ -98,8 +99,8 @@ impl DNSHeader {
                 id: u16::from_be_bytes([bytes[0], bytes[1]]),
                 qr: bytes[2] >> 7,
                 opcode: (bytes[2] >> 3) & 0b1111,
-                aa: (bytes[2] >> 2) & 0b1,
-                tc: (bytes[2] >> 1) & 0b1,
+                aa: bytes[2] & 0b100,
+                tc: bytes[2] & 0b10,
                 rd: bytes[2] & 0b1,
                 ra: bytes[3] >> 7,
                 z: (bytes[3] >> 4) & 0b111,
@@ -113,6 +114,7 @@ impl DNSHeader {
     }
 }
 
+#[derive(Debug)]
 pub struct DNSQuestion {
     // A domain name represented as a sequence of labels, where each label consists of a length
     // octet followed by that number of octets.
@@ -155,6 +157,7 @@ impl DNSQuestion {
     }
 }
 
+#[derive(Debug)]
 pub struct DNSAnswer {
     // A domain name represented as a sequence of labels, where each label consists of a length
     // octet followed by that number of octets.
@@ -188,23 +191,20 @@ impl DNSAnswer {
     }
 }
 
+#[derive(Debug)]
 pub struct DNSQuery {
     header: DNSHeader,
     question_section: DNSQuestion,
 }
 
 impl DNSQuery {
-    pub fn new(id: u16, question: DNSQuestion) -> DNSQuery {
-        DNSQuery {
-            header: DNSHeader::new(id, false),
-            question_section: question,
-        }
-    }
-
     pub fn from_bytes(bytes: &[u8]) -> Result<DNSQuery, ProtocolError> {
         let header = DNSHeader::from_bytes(bytes)?;
         let question_section = DNSQuestion::from_bytes(&bytes[12..]);
-        Ok(DNSQuery::new(header.id, question_section))
+        Ok(DNSQuery {
+            header,
+            question_section,
+        })
     }
 
     #[allow(dead_code)]
@@ -215,6 +215,7 @@ impl DNSQuery {
     }
 }
 
+#[derive(Debug)]
 pub struct DNSResponse {
     header: DNSHeader,
     question_section: DNSQuestion,

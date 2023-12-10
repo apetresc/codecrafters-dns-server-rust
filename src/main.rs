@@ -12,7 +12,9 @@ fn main() {
                 println!("Received {} bytes from {}", size, source);
                 match protocol::DNSQuery::from_bytes(&buf[0..size]) {
                     Ok(query) => {
+                        //println!("Query: {:?}", query);
                         let response = protocol::DNSResponse::for_request(query);
+                        //println!("Response: {:?}", response);
                         udp_socket
                             .send_to(&response.to_bytes(), source)
                             .expect("Failed to send response");
