@@ -225,6 +225,12 @@ impl DNSResponse {
     pub fn for_request(query: DNSQuery) -> DNSResponse {
         let mut header = DNSHeader::new(query.header.id, true);
         header.qdcount = 1;
+        header.opcode = query.header.opcode;
+        header.rd = query.header.rd;
+        header.rcode = match query.header.opcode {
+            0 => 0,
+            _ => 4,
+        };
         // TODO: Actually compute these values
         let answer = DNSAnswer {
             domain_name: query.question_section.domain_name.clone(),
